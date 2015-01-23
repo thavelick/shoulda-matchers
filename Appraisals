@@ -121,6 +121,7 @@ if Gem::Requirement.new('> 1.9.2').satisfied_by?(ruby_version)
     gem 'sdoc', '~> 0.4.0'
     gem 'bcrypt', '~> 3.1.7'
     gem 'byebug'
+    gem 'web-console', '~> 2.0'
     gem 'spring'
     gem 'protected_attributes', "~> 1.0.6"
   end
