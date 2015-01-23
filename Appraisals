@@ -121,5 +121,6 @@ if Gem::Requirement.new('> 1.9.2').satisfied_by?(ruby_version)
     gem 'bcrypt', '~> 3.1.7'
     gem 'protected_attributes', "~> 1.0.6"
     gem 'spring'
+    gem 'coffee-rails', '~> 4.1.0'
   end
 end
