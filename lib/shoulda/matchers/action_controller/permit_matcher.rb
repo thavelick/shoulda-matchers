@@ -162,17 +162,26 @@ module Shoulda
         attr_writer :stubbed_params
 
         def initialize(expected_permitted_params)
+          @expected_permitted_params = expected_permitted_params
           @action = nil
           @verb = nil
           @request_params = {}
-          @expected_permitted_params = expected_permitted_params
-          set_double_collection
+          @slice = nil
+
+          @double_collections = {}
+
+          set_up_parameters_doubling
         end
 
         def for(action, options = {})
           @action = action
           @verb = options.fetch(:verb, default_verb)
           @request_params = options.fetch(:params, {})
+          self
+        end
+
+        def on(slice)
+          @slice = slice
           self
         end
 
@@ -197,32 +206,70 @@ module Shoulda
         end
 
         def failure_message
-          "Expected controller to permit #{unpermitted_params.to_sentence}, but it did not."
+          "Expected controller to #{expectation}, but it permitted #{actual_permitted_params} instead."
         end
         alias failure_message_for_should failure_message
 
         def failure_message_when_negated
-          "Expected controller not to permit #{verified_permitted_params.to_sentence}, but it did."
+          "Expected controller not to #{expectation}, but it did."
         end
         alias failure_message_for_should_not failure_message_when_negated
 
         protected
 
-        attr_reader :controller, :double_collection, :action, :verb,
+        attr_reader :controller, :double_collections, :action, :verb,
           :request_params, :expected_permitted_params, :context
 
-        def set_double_collection
-          @double_collection =
+        def expectation
+          message = "to permit #{expected_permitted_params}"
+
+          if slice
+            message << " for #{slice.inspect}"
+          end
+
+          message
+        end
+
+        def set_up_parameters_doubling
+          double_collections = @double_collections
+
+          parameters_double_collection =
             Doublespeak.double_collection_for(::ActionController::Parameters)
 
-          @double_collection.register_stub(:require).to_return { |params| params }
-          @double_collection.register_proxy(:permit)
+          require_double = parameters_double_collection.register_proxy(:require)
+
+          require_double.to_return do |params, args|
+            double_collections[args] ||= begin
+              required_params_double_collection =
+                Doublespeak.double_collection_for(params.singleton_class)
+
+              required_params_double_collection.register_proxy(:permit)
+
+              params
+            end
+          end
         end
 
         def actual_permitted_params
-          double_collection.calls_to(:permit).inject([]) do |all_param_names, call|
-            all_param_names + call.args
-          end.flatten
+          if slice
+            permitted_params_for_slice
+          else
+            all_actual_permitted_params
+          end
+        end
+
+        def permitted_params_for_slice
+          permitted_params_for(double_collections[slice])
+        end
+
+        def all_actual_permitted_params
+          double_collections.flat_map do |double_collection|
+            permitted_params_within(double_collection)
+          end
+        end
+
+        def permitted_params_within(double_collection)
+          double_collection.calls_to(:permit).flat_map { |call| call.args }
         end
 
         def permit_called?

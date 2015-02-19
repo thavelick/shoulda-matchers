@@ -99,6 +99,28 @@ describe Shoulda::Matchers::ActionController::PermitMatcher, type: :controller d
     expect(controller).to permit(*sets_of_attributes[1]).for(:create)
   end
 
+  it 'rejects if parameters were not permitted on the incorrect slices' do
+    sets_of_attributes = [
+      [:eta, :diner_id],
+      [:phone_number, :address_1, :address_2, :city, :state, :zip]
+    ]
+
+    define_controller_for_resource_with_strong_parameters(action: :create) do
+      params.require(:order).permit(sets_of_attributes[0])
+      params.require(:diner).permit(sets_of_attributes[1])
+    end
+
+    expect(controller).
+      not_to permit(*sets_of_attributes[0]).
+      for(:create).
+      on(:diner)
+
+    expect(controller).
+      not_to permit(*sets_of_attributes[1]).
+      for(:create).
+      on(:order)
+  end
+
   describe '#matches?' do
     it 'does not raise an error when #fetch was used instead of #require (issue #495)' do
       matcher = permit(:eta, :diner_id).for(:create)
@@ -132,6 +154,24 @@ describe Shoulda::Matchers::ActionController::PermitMatcher, type: :controller d
 
         expect(actual_user_params).to eq('some' => 'params')
         expect(actual_foo_param).to eq 'bar'
+      end
+
+      it 'still allows #require to return a slice of the params' do
+        expected_user_params = { foo: 'bar' }
+        actual_user_params = nil
+        matcher = permit(:name).for(
+          :update,
+          params: { id: 1, user: expected_user_params }
+        )
+
+        define_controller_for_resource_with_strong_parameters(action: :update) do
+          actual_user_params = params.require(:user)
+          actual_user_params.permit(:name)
+        end
+
+        matcher.matches?(controller)
+
+        expect(actual_user_params).to eq expected_user_params
       end
 
       it 'does not permanently stub the params hash' do
