@@ -21,9 +21,8 @@ module Shoulda
           end
         end
 
-        def call(double, object, args, block)
-          double.record_call(args, block)
-          implementation.call(object, args, block)
+        def call(call)
+          implementation.call(call)
         end
 
         protected

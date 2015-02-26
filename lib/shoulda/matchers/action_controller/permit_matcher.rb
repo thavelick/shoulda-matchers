@@ -168,7 +168,7 @@ module Shoulda
           @request_params = {}
           @slice = nil
 
-          @double_collections = {}
+          @double_collections_by_param = {}
 
           set_up_parameters_doubling
         end
@@ -177,6 +177,11 @@ module Shoulda
           @action = action
           @verb = options.fetch(:verb, default_verb)
           @request_params = options.fetch(:params, {})
+          self
+        end
+
+        def add_params(params)
+          request_params.merge!(params)
           self
         end
 
@@ -191,7 +196,7 @@ module Shoulda
         end
 
         def description
-          "permit #{verb.upcase} ##{action} to receive parameters #{param_names_as_sentence}"
+          expectation
         end
 
         def matches?(controller)
@@ -206,7 +211,8 @@ module Shoulda
         end
 
         def failure_message
-          "Expected controller to #{expectation}, but it permitted #{actual_permitted_params} instead."
+          "Expected controller to #{expectation},\n" +
+            "but it permitted #{format_param_names(actual_permitted_params)} instead."
         end
         alias failure_message_for_should failure_message
 
@@ -217,11 +223,11 @@ module Shoulda
 
         protected
 
-        attr_reader :controller, :double_collections, :action, :verb,
-          :request_params, :expected_permitted_params, :context
+        attr_reader :controller, :double_collections_by_param, :action, :verb,
+          :request_params, :expected_permitted_params, :context, :slice
 
         def expectation
-          message = "to permit #{expected_permitted_params}"
+          message = "permit #{format_param_names(expected_permitted_params)}"
 
           if slice
             message << " for #{slice.inspect}"
@@ -230,22 +236,35 @@ module Shoulda
           message
         end
 
+        def format_param_names(param_names)
+          param_names.map(&:inspect).to_sentence
+        end
+
         def set_up_parameters_doubling
-          double_collections = @double_collections
+          double_collections_by_param = @double_collections_by_param
 
           parameters_double_collection =
             Doublespeak.double_collection_for(::ActionController::Parameters)
 
+          double_collections_by_param[nil] = parameters_double_collection
+
+          parameters_double_collection.register_proxy(:permit)
+
           require_double = parameters_double_collection.register_proxy(:require)
 
-          require_double.to_return do |params, args|
-            double_collections[args] ||= begin
+          require_double.to_return do |call|
+            key = call.args.first
+            return_value = call.return_value
+
+            binding.pry
+
+            double_collections_by_param[key] ||= begin
               required_params_double_collection =
-                Doublespeak.double_collection_for(params.singleton_class)
+                Doublespeak.double_collection_for(return_value.singleton_class)
 
               required_params_double_collection.register_proxy(:permit)
 
-              params
+              required_params_double_collection
             end
           end
         end
@@ -259,13 +278,13 @@ module Shoulda
         end
 
         def permitted_params_for_slice
-          permitted_params_for(double_collections[slice])
+          permitted_params_within(double_collections_by_param[slice])
         end
 
         def all_actual_permitted_params
-          double_collections.flat_map do |double_collection|
+          double_collections_by_param.map do |_, double_collection|
             permitted_params_within(double_collection)
-          end
+          end.flatten
         end
 
         def permitted_params_within(double_collection)
